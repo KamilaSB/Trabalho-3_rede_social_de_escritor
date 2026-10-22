@@ -3,14 +3,12 @@ package com.example.myapplication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,25 +16,42 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.ui.theme.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(onBack: () -> Unit, onSave: () -> Unit, onNavigate: (String) -> Unit) {
-    var name by remember { mutableStateOf("Helena Andrade") }
-    var username by remember { mutableStateOf("helena_escreve") }
-    var bio by remember { mutableStateOf("Escrevo para desenhar pontes secretas no silêncio do mundo cotidiano.") }
-    
-    val tags = remember { mutableStateListOf<Tag>() }
-    var newTagText by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val db = AppDatabase.getInstance(context)
+    val scope = rememberCoroutineScope()
+
+    var usuario by remember { mutableStateOf<Usuario?>(null) }
+    var name by remember { mutableStateOf("") }
+    var bio by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val user = db.usuarioDao().buscarTodos().firstOrNull()
+            usuario = user
+            user?.let {
+                name = it.nome
+                bio = it.bio
+                email = it.email
+            }
+        }
+    }
 
     Scaffold(
         containerColor = FolioBackground,
@@ -119,18 +134,10 @@ fun EditProfileScreen(onBack: () -> Unit, onSave: () -> Unit, onNavigate: (Strin
                 Spacer(modifier = Modifier.height(20.dp))
 
                 EditField(
-                    label = "Nome de usuário",
-                    value = username,
-                    onValueChange = { username = it },
-                    leadingIcon = {
-                        Text(
-                            "@",
-                            color = FolioOrange,
-                            fontSize = 18.sp,
-                            modifier = Modifier.padding(start = 12.dp)
-                        )
-                    },
-                    helperText = "Seu nome para ser encontrada por outros leitores."
+                    label = "Email",
+                    value = email,
+                    onValueChange = { email = it },
+                    helperText = "Seu endereço de e-mail privado."
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
@@ -151,71 +158,6 @@ fun EditProfileScreen(onBack: () -> Unit, onSave: () -> Unit, onNavigate: (Strin
                     )
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                Text(
-                    text = "TAGS DE INTERESSE",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = FolioTextPrimary,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-                )
-
-                // Add Tag Form
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = newTagText,
-                        onValueChange = { newTagText = it },
-                        label = { Text("Nova Tag") },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            if (newTagText.isNotBlank()) {
-                                tags.add(Tag(tags.size + 1, newTagText))
-                                newTagText = ""
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = FolioOrange),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Add")
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            // Tags List
-            items(tags, key = { it.id }) { tag ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    onClick = { onNavigate("TagDetail/${tag.name}") },
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(tag.name, fontWeight = FontWeight.Medium)
-                        IconButton(onClick = { tags.remove(tag) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Remover", tint = Color.Gray)
-                        }
-                    }
-                }
-            }
-
-            item {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -237,7 +179,17 @@ fun EditProfileScreen(onBack: () -> Unit, onSave: () -> Unit, onNavigate: (Strin
 
                 // Buttons
                 Button(
-                    onClick = onSave,
+                    onClick = {
+                        usuario?.let {
+                            scope.launch(Dispatchers.IO) {
+                                val updatedUser = it.copy(nome = name, bio = bio, email = email)
+                                db.usuarioDao().update(updatedUser)
+                                withContext(Dispatchers.Main) {
+                                    onSave()
+                                }
+                            }
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
@@ -317,13 +269,5 @@ fun EditField(
                 }
             }
         }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun EditProfilePreview() {
-    MyApplicationTheme {
-        EditProfileScreen(onBack = {}, onSave = {}, onNavigate = {})
     }
 }

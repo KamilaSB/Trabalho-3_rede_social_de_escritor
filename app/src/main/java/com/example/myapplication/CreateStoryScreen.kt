@@ -1,6 +1,5 @@
 package com.example.myapplication
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -8,7 +7,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.Notifications
@@ -18,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -26,6 +25,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.ui.theme.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,8 +36,9 @@ fun CreateStoryScreen(onNavigate: (String) -> Unit) {
     var description by remember { mutableStateOf("") }
     var storyText by remember { mutableStateOf("") }
     
-    val tags = remember { mutableStateListOf<Tag>() }
-    var newTagText by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val db = AppDatabase.getInstance(context)
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         containerColor = FolioBackground,
@@ -81,64 +84,6 @@ fun CreateStoryScreen(onNavigate: (String) -> Unit) {
                     letterSpacing = 1.sp
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                // Form to add Tags
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = newTagText,
-                        onValueChange = { newTagText = it },
-                        label = { Text("Nova Tag") },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            if (newTagText.isNotBlank()) {
-                                tags.add(Tag(tags.size + 1, newTagText))
-                                newTagText = ""
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = FolioOrange),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Add")
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            // Tags List using LazyColumn elements (nested in main LazyColumn)
-            items(tags, key = { it.id }) { tag ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    onClick = { onNavigate("TagDetail/${tag.name}") },
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(tag.name, fontWeight = FontWeight.Medium)
-                        IconButton(onClick = { tags.remove(tag) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Remover", tint = Color.Gray)
-                        }
-                    }
-                }
-            }
-
-            item {
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Title Input
@@ -181,17 +126,11 @@ fun CreateStoryScreen(onNavigate: (String) -> Unit) {
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            "ECHOES OF DUST",
+                            "CAPA PADRÃO",
                             color = Color.Black,
                             fontWeight = FontWeight.Bold,
                             fontSize = 20.sp,
                             fontFamily = FontFamily.Serif
-                        )
-                        Text(
-                            "A NOVEL",
-                            color = Color.Black,
-                            fontSize = 10.sp,
-                            letterSpacing = 2.sp
                         )
                     }
                 }
@@ -208,7 +147,6 @@ fun CreateStoryScreen(onNavigate: (String) -> Unit) {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Description Input
                 BasicTextField(
                     value = description,
                     onValueChange = { description = it },
@@ -239,7 +177,7 @@ fun CreateStoryScreen(onNavigate: (String) -> Unit) {
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "TEXTO",
+                    text = "CONTEÚDO",
                     color = Color.Gray,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -276,9 +214,28 @@ fun CreateStoryScreen(onNavigate: (String) -> Unit) {
                         .padding(bottom = 32.dp)
                 )
 
-                // Send Button
+                // Publicar Button
                 Button(
-                    onClick = { /* Handle send */ },
+                    onClick = {
+                        if (title.isNotBlank() && storyText.isNotBlank()) {
+                            scope.launch(Dispatchers.IO) {
+                                // Buscamos o primeiro usuário (autor logado localmente)
+                                val user = db.usuarioDao().buscarTodos().firstOrNull()
+                                if (user != null) {
+                                    val novoTexto = Texto(
+                                        titulo = title,
+                                        conteudo = storyText,
+                                        categoria = "Crônica",
+                                        autorId = user.id
+                                    )
+                                    db.textoDao().insert(novoTexto)
+                                    withContext(Dispatchers.Main) {
+                                        onNavigate("Feed")
+                                    }
+                                }
+                            }
+                        }
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = FolioOrange),
                     shape = RoundedCornerShape(25.dp),
                     modifier = Modifier
@@ -286,28 +243,11 @@ fun CreateStoryScreen(onNavigate: (String) -> Unit) {
                         .height(50.dp),
                     contentPadding = PaddingValues(horizontal = 24.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Enviar", color = Color.White, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            Icons.Default.Close, 
-                            contentDescription = null, 
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    Text("Publicar Agora", color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 
                 Spacer(modifier = Modifier.height(100.dp))
             }
         }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun CreateStoryPreview() {
-    MyApplicationTheme {
-        CreateStoryScreen(onNavigate = {})
     }
 }
