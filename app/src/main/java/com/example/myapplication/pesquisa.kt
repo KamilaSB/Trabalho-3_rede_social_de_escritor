@@ -4,26 +4,45 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.ui.theme.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ExplorarScreen(onNavigate: (String) -> Unit) {
+    var searchText by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val db = AppDatabase.getInstance(context)
+    var searchResults by remember { mutableStateOf(listOf<Texto>()) }
+
+    LaunchedEffect(searchText) {
+        if (searchText.isNotBlank()) {
+            withContext(Dispatchers.IO) {
+                searchResults = db.textoDao().pesquisar(searchText)
+            }
+        } else {
+            searchResults = emptyList()
+        }
+    }
+
     Scaffold(
         containerColor = FolioBackground,
         topBar = {
@@ -50,7 +69,6 @@ fun ExplorarScreen(onNavigate: (String) -> Unit) {
             )
         },
         bottomBar = {
-            // Chamando a navegação compartilhada passando o callback
             SharedBottomNavigation(selectedItem = "Search", onNavigate = onNavigate)
         }
     ) { innerPadding ->
@@ -64,8 +82,8 @@ fun ExplorarScreen(onNavigate: (String) -> Unit) {
             // Barra de Busca
             item {
                 OutlinedTextField(
-                    value = "",
-                    onValueChange = {},
+                    value = searchText,
+                    onValueChange = { searchText = it },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
@@ -90,54 +108,83 @@ fun ExplorarScreen(onNavigate: (String) -> Unit) {
                 )
             }
 
-            // Gêneros Populares
-            item {
-                Column {
-                    Text(
-                        text = "GÊNEROS POPULARES",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Gray,
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val genres = listOf("Poesia", "Ficção", "Ensaios", "Crônica", "Romance", "Resenhas")
-                        genres.forEach { genre ->
-                            GenreChip(genre)
+            if (searchText.isEmpty()) {
+                // Gêneros Populares
+                item {
+                    Column {
+                        Text(
+                            text = "GÊNEROS POPULARES",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Gray,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val genres = listOf("Poesia", "Ficção", "Ensaios", "Crônica", "Romance", "Resenhas")
+                            genres.forEach { genre ->
+                                GenreChip(genre)
+                            }
                         }
                     }
                 }
-            }
 
-            // Recomendados do Mês
-            item {
-                Column {
+                // Recomendados do Mês
+                item {
+                    Column {
+                        Text(
+                            text = "RECOMENDADOS DO MÊS",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Gray,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            BookCardPesquisa(
+                                title = "Margens do Cais",
+                                author = "Cecília Meireles",
+                                modifier = Modifier.weight(1f)
+                            )
+                            BookCardPesquisa(
+                                title = "Ensaio sobre a Cegueira",
+                                author = "José Saramago",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Resultados da Pesquisa
+                item {
                     Text(
-                        text = "RECOMENDADOS DO MÊS",
+                        text = "RESULTADOS DA BUSCA",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Gray,
                         letterSpacing = 1.sp
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        BookCardPesquisa(
-                            title = "Margens do Cais",
-                            author = "Cecília Meireles",
-                            modifier = Modifier.weight(1f)
-                        )
-                        BookCardPesquisa(
-                            title = "Ensaio sobre a Cegueira",
-                            author = "José Saramago",
-                            modifier = Modifier.weight(1f)
+                }
+
+                if (searchResults.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text("Nenhum resultado encontrado.", color = Color.Gray)
+                        }
+                    }
+                } else {
+                    items(searchResults) { texto ->
+                        PublicationCard(
+                            texto = texto,
+                            onDelete = {}, // Apenas exibição na busca
+                            onClick = { /* Navegar para detalhe */ }
                         )
                     }
                 }
